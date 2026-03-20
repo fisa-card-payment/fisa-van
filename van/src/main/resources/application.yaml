@@ -27,3 +27,14 @@ eureka:
     enabled: true
   instance:
     prefer-ip-address: true
+
+# 배치 설정 추가
+batch:
+  csv:
+    path: ./csv/
+  gateway:
+    url: http://localhost:8080/api/batch/acquire
+
+logging:
+  level:
+    org.springframework.batch: DEBUG
