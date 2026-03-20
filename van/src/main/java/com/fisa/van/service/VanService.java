@@ -35,20 +35,20 @@ public class VanService {
                 .orElse(null);
 
         String cardCompany = cardBin != null ? cardBin.getCompanyName() : "UNKNOWN";
-        String cardCompanyEndpoint = cardBin != null ? cardBin.getApiEndpoint() : null;
+        String cardCompanyEndpoint = cardBin != null
+                ? cardBin.getApiEndpoint()
+                : "http://localhost:8080/api/payment/approve"; // Gateway 기본값
 
         // 3. 카드사로 승인 요청 (Gateway 경유)
         PaymentResponseDto cardResponse = null;
-        if (cardCompanyEndpoint != null) {
-            try {
-                cardResponse = restTemplate.postForObject(
-                        cardCompanyEndpoint,
-                        request,
-                        PaymentResponseDto.class
-                );
-            } catch (Exception e) {
-                log.error("[VAN] 카드사 요청 실패: {}", e.getMessage());
-            }
+        try {
+            cardResponse = restTemplate.postForObject(
+                    cardCompanyEndpoint,
+                    request,
+                    PaymentResponseDto.class
+            );
+        } catch (Exception e) {
+            log.error("[VAN] 카드사 요청 실패: {}", e.getMessage());
         }
 
         // 4. 응답 처리
