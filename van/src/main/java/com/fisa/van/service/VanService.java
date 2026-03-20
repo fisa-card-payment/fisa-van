@@ -13,8 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.UUID;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -26,20 +24,16 @@ public class VanService {
 
     @Transactional
     public PaymentResponseDto processPayment(PaymentRequestDto request) {
-        // 1. RRN 생성 (거래 고유번호 12자리)
-        String rrn = generateRrn();
-
-        // 2. BIN 조회로 카드사 찾기
+        // 1. BIN 조회로 카드사 찾기
         String binPrefix = request.getCardNumber().replaceAll("-", "").substring(0, 6);
-        CardBin cardBin = cardBinRepository.findByBinPrefix(binPrefix)
-                .orElse(null);
+        CardBin cardBin = cardBinRepository.findByBinPrefix(binPrefix).orElse(null);
 
         String cardCompany = cardBin != null ? cardBin.getCompanyName() : "UNKNOWN";
         String cardCompanyEndpoint = cardBin != null
                 ? cardBin.getApiEndpoint()
-                : "http://localhost:8080/api/payment/approve"; // Gateway 기본값
+                : "http://localhost:8080/payment/credit";
 
-        // 3. 카드사로 승인 요청 (Gateway 경유)
+        // 2. 카드사로 승인 요청 (Gateway 경유)
         PaymentResponseDto cardResponse = null;
         try {
             cardResponse = restTemplate.postForObject(
@@ -50,6 +44,11 @@ public class VanService {
         } catch (Exception e) {
             log.error("[VAN] 카드사 요청 실패: {}", e.getMessage());
         }
+
+        // 3. 카드사 응답에서 RRN 꺼내기
+        String rrn = (cardResponse != null && cardResponse.getRrn() != null)
+                ? cardResponse.getRrn()
+                : "UNKNOWN_" + System.currentTimeMillis();
 
         // 4. 응답 처리
         String status = (cardResponse != null && "00".equals(cardResponse.getResponseCode()))
@@ -88,11 +87,30 @@ public class VanService {
         VanTransaction original = vanTransactionRepository.findByRrn(request.getRrn())
                 .orElseThrow(() -> new IllegalArgumentException("원거래를 찾을 수 없습니다: " + request.getRrn()));
 
-        // 2. 카드사로 취소 요청 (TODO: 카드사 API 연동)
         log.info("[VAN] 취소 요청 - RRN: {}", request.getRrn());
 
-        // 3. 취소 거래 저장
-        String cancelRrn = generateRrn();
+        // 2. 카드사로 취소 요청 (Gateway 경유)
+        PaymentResponseDto cardResponse = null;
+        try {
+            String cancelEndpoint = original.getCardCompany() != null
+                    ? "http://localhost:8080/payment/cancel"
+                    : "http://localhost:8080/payment/cancel";
+
+            cardResponse = restTemplate.postForObject(
+                    cancelEndpoint,
+                    request,
+                    PaymentResponseDto.class
+            );
+        } catch (Exception e) {
+            log.error("[VAN] 카드사 취소 요청 실패: {}", e.getMessage());
+        }
+
+        // 3. 카드사 응답에서 RRN 꺼내기
+        String cancelRrn = (cardResponse != null && cardResponse.getRrn() != null)
+                ? cardResponse.getRrn()
+                : "UNKNOWN_" + System.currentTimeMillis();
+
+        // 4. 취소 거래 저장
         VanTransaction cancelTx = VanTransaction.builder()
                 .rrn(cancelRrn)
                 .stan(original.getStan())
@@ -100,21 +118,18 @@ public class VanService {
                 .amount(request.getAmount())
                 .merchantId(request.getMerchantId())
                 .cardCompany(original.getCardCompany())
-                .responseCode("00")
-                .status("CANCELLED")
+                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
+                .status(cardResponse != null && "00".equals(cardResponse.getResponseCode())
+                        ? "CANCELLED" : "CANCEL_FAILED")
                 .build();
 
         vanTransactionRepository.save(cancelTx);
 
         return PaymentResponseDto.builder()
                 .rrn(cancelRrn)
-                .responseCode("00")
-                .status("CANCELLED")
-                .message("취소 완료")
+                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
+                .status(cancelTx.getStatus())
+                .message(cancelTx.getStatus().equals("CANCELLED") ? "취소 완료" : "취소 실패")
                 .build();
-    }
-
-    private String generateRrn() {
-        return UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12).toUpperCase();
     }
 }
