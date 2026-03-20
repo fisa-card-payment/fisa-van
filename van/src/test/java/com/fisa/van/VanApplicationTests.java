@@ -1,10 +1,10 @@
-package com.fisa.gateway;
+package com.fisa.van;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class GatewayApplicationTests {
+class VanApplicationTests {
 
 	@Test
 	void contextLoads() {
