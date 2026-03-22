@@ -13,9 +13,14 @@ public class AcquisitionItemProcessor implements ItemProcessor<VanTransaction, S
     public String process(VanTransaction tx) {
         // 카드번호 마스킹: 앞 6자리 + ****** + 뒤 4자리
         String cardNumber = tx.getCardNumber().replaceAll("-", "");
-        String maskedCard = cardNumber.substring(0, 6)
-                + "******"
-                + cardNumber.substring(cardNumber.length() - 4);
+        String maskedCard;
+        if (cardNumber.length() >= 10) {
+            maskedCard = cardNumber.substring(0, 6)
+                    + "******"
+                    + cardNumber.substring(cardNumber.length() - 4);
+        } else {
+            maskedCard = "******";
+        }
 
         // CSV 한 줄 생성
         return String.join(",",

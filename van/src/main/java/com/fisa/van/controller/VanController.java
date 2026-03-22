@@ -25,11 +25,11 @@ public class VanController {
         return ResponseEntity.ok(response);
     }
 
-    // 취소/환불 요청
-    @PostMapping("/cancel")
-    public ResponseEntity<PaymentResponseDto> cancel(@RequestBody CancelRequestDto request) {
-        log.info("[VAN] 취소 요청 - RRN: {}", request.getRrn());
-        PaymentResponseDto response = vanService.processCancel(request);
-        return ResponseEntity.ok(response);
-    }
+//    // 취소/환불 요청
+//    @PostMapping("/cancel")
+//    public ResponseEntity<PaymentResponseDto> cancel(@RequestBody CancelRequestDto request) {
+//        log.info("[VAN] 취소 요청 - RRN: {}", request.getRrn());
+//        PaymentResponseDto response = vanService.processCancel(request);
+//        return ResponseEntity.ok(response);
+//    }
 }
