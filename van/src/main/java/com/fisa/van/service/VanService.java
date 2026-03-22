@@ -24,16 +24,34 @@ public class VanService {
 
     @Transactional
     public PaymentResponseDto processPayment(PaymentRequestDto request) {
-        // 1. BIN 조회로 카드사 찾기
+        // 1. 카드 번호 앞자리로 신용/체크 구분
+        String firstDigit = request.getCardNumber().replaceAll("-", "").substring(0, 1);
+        String cardCompanyEndpoint;
+        String cardType;
+
+        if ("1".equals(firstDigit)) {
+            cardCompanyEndpoint = "http://localhost:8080/payment/credit";
+            cardType = "CREDIT";
+        } else if ("5".equals(firstDigit)) {
+            cardCompanyEndpoint = "http://localhost:8080/payment/check";
+            cardType = "CHECK";
+        } else {
+            log.error("[VAN] 알 수 없는 카드 번호: {}", request.getCardNumber());
+            return PaymentResponseDto.builder()
+                    .responseCode("99")
+                    .status("REJECTED")
+                    .message("유효하지 않은 카드번호")
+                    .build();
+        }
+
+        // 2. BIN 조회로 카드사 이름 찾기
         String binPrefix = request.getCardNumber().replaceAll("-", "").substring(0, 6);
         CardBin cardBin = cardBinRepository.findByBinPrefix(binPrefix).orElse(null);
-
         String cardCompany = cardBin != null ? cardBin.getCompanyName() : "UNKNOWN";
-        String cardCompanyEndpoint = cardBin != null
-                ? cardBin.getApiEndpoint()
-                : "http://localhost:8080/payment/credit";
 
-        // 2. 카드사로 승인 요청 (Gateway 경유)
+        log.info("[VAN] {} 결제 요청 - 가맹점: {}, 금액: {}", cardType, request.getMerchantId(), request.getAmount());
+
+        // 3. 카드사로 승인 요청 (Gateway 경유)
         PaymentResponseDto cardResponse = null;
         try {
             cardResponse = restTemplate.postForObject(
@@ -45,18 +63,18 @@ public class VanService {
             log.error("[VAN] 카드사 요청 실패: {}", e.getMessage());
         }
 
-        // 3. 카드사 응답에서 RRN 꺼내기
+        // 4. 카드사 응답에서 RRN 꺼내기
         String rrn = (cardResponse != null && cardResponse.getRrn() != null)
                 ? cardResponse.getRrn()
                 : "UNKNOWN_" + System.currentTimeMillis();
 
-        // 4. 응답 처리
+        // 5. 응답 처리
         String status = (cardResponse != null && "00".equals(cardResponse.getResponseCode()))
                 ? "APPROVED" : "REJECTED";
         String approvalCode = cardResponse != null ? cardResponse.getApprovalCode() : null;
         String responseCode = cardResponse != null ? cardResponse.getResponseCode() : "99";
 
-        // 5. DB 저장
+        // 6. DB 저장
         VanTransaction tx = VanTransaction.builder()
                 .rrn(rrn)
                 .stan(request.getStan())
@@ -81,55 +99,53 @@ public class VanService {
                 .build();
     }
 
-    @Transactional
-    public PaymentResponseDto processCancel(CancelRequestDto request) {
-        // 1. 원거래 조회
-        VanTransaction original = vanTransactionRepository.findByRrn(request.getRrn())
-                .orElseThrow(() -> new IllegalArgumentException("원거래를 찾을 수 없습니다: " + request.getRrn()));
-
-        log.info("[VAN] 취소 요청 - RRN: {}", request.getRrn());
-
-        // 2. 카드사로 취소 요청 (Gateway 경유)
-        PaymentResponseDto cardResponse = null;
-        try {
-            String cancelEndpoint = original.getCardCompany() != null
-                    ? "http://localhost:8080/payment/cancel"
-                    : "http://localhost:8080/payment/cancel";
-
-            cardResponse = restTemplate.postForObject(
-                    cancelEndpoint,
-                    request,
-                    PaymentResponseDto.class
-            );
-        } catch (Exception e) {
-            log.error("[VAN] 카드사 취소 요청 실패: {}", e.getMessage());
-        }
-
-        // 3. 카드사 응답에서 RRN 꺼내기
-        String cancelRrn = (cardResponse != null && cardResponse.getRrn() != null)
-                ? cardResponse.getRrn()
-                : "UNKNOWN_" + System.currentTimeMillis();
-
-        // 4. 취소 거래 저장
-        VanTransaction cancelTx = VanTransaction.builder()
-                .rrn(cancelRrn)
-                .stan(original.getStan())
-                .cardNumber(original.getCardNumber())
-                .amount(request.getAmount())
-                .merchantId(request.getMerchantId())
-                .cardCompany(original.getCardCompany())
-                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
-                .status(cardResponse != null && "00".equals(cardResponse.getResponseCode())
-                        ? "CANCELLED" : "CANCEL_FAILED")
-                .build();
-
-        vanTransactionRepository.save(cancelTx);
-
-        return PaymentResponseDto.builder()
-                .rrn(cancelRrn)
-                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
-                .status(cancelTx.getStatus())
-                .message(cancelTx.getStatus().equals("CANCELLED") ? "취소 완료" : "취소 실패")
-                .build();
-    }
+//    @Transactional
+//    public PaymentResponseDto processCancel(CancelRequestDto request) {
+//        // 1. 원거래 조회
+//        VanTransaction original = vanTransactionRepository.findByRrn(request.getRrn())
+//                .orElseThrow(() -> new IllegalArgumentException("원거래를 찾을 수 없습니다: " + request.getRrn()));
+//
+//        log.info("[VAN] 취소 요청 - RRN: {}", request.getRrn());
+//
+//        // 2. 카드사로 취소 요청 (Gateway 경유)
+//        PaymentResponseDto cardResponse = null;
+//        try {
+//            cardResponse = restTemplate.postForObject(
+//                    "http://localhost:8080/payment/cancel",
+//                    request,
+//                    PaymentResponseDto.class
+//            );
+//        } catch (Exception e) {
+//            log.error("[VAN] 카드사 취소 요청 실패: {}", e.getMessage());
+//        }
+//
+//        // 3. 카드사 응답에서 RRN 꺼내기
+//        String cancelRrn = (cardResponse != null && cardResponse.getRrn() != null)
+//                ? cardResponse.getRrn()
+//                : "UNKNOWN_" + System.currentTimeMillis();
+//
+//        // 4. 취소 거래 저장
+//        String cancelStatus = (cardResponse != null && "00".equals(cardResponse.getResponseCode()))
+//                ? "CANCELLED" : "CANCEL_FAILED";
+//
+//        VanTransaction cancelTx = VanTransaction.builder()
+//                .rrn(cancelRrn)
+//                .stan(original.getStan())
+//                .cardNumber(original.getCardNumber())
+//                .amount(request.getAmount())
+//                .merchantId(request.getMerchantId())
+//                .cardCompany(original.getCardCompany())
+//                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
+//                .status(cancelStatus)
+//                .build();
+//
+//        vanTransactionRepository.save(cancelTx);
+//
+//        return PaymentResponseDto.builder()
+//                .rrn(cancelRrn)
+//                .responseCode(cardResponse != null ? cardResponse.getResponseCode() : "99")
+//                .status(cancelStatus)
+//                .message(cancelStatus.equals("CANCELLED") ? "취소 완료" : "취소 실패")
+//                .build();
+//    }
 }
