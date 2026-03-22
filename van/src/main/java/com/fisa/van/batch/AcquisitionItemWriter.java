@@ -72,6 +72,8 @@ public class AcquisitionItemWriter implements ItemWriter<String> {
                 .build();
 
         acquisitionBatchRepository.save(batch);
+
+        sendCsvToCardCompany(fileName);
     }
 
     // CSV 파일 카드사로 전송
