@@ -79,18 +79,22 @@ public class AcquisitionItemWriter implements ItemWriter<String> {
     // CSV 파일 카드사로 전송
     public void sendCsvToCardCompany(String fileName) {
         File csvFile = new File(csvPath + fileName);
+        String batchDate = LocalDate.now().minusDays(1).toString();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(csvFile));
-        body.add("batchDate", LocalDate.now().minusDays(1).toString());
+        // batchDate body에서 제거
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
+        // batchDate를 QueryParam으로
+        String url = gatewayUrl + "?batchDate=" + batchDate;
+
         try {
-            restTemplate.postForObject(gatewayUrl, requestEntity, String.class);
+            restTemplate.postForObject(url, requestEntity, String.class);
             log.info("[BATCH] CSV 전송 완료: {}", fileName);
         } catch (Exception e) {
             log.error("[BATCH] CSV 전송 실패: {}", e.getMessage());

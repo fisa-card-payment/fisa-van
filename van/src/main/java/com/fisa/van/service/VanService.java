@@ -24,34 +24,15 @@ public class VanService {
 
     @Transactional
     public PaymentResponseDto processPayment(PaymentRequestDto request) {
-        // 1. 카드 번호 앞자리로 신용/체크 구분
-        String firstDigit = request.getCardNumber().replaceAll("-", "").substring(0, 1);
-        String cardCompanyEndpoint;
-        String cardType;
-
-        if ("1".equals(firstDigit)) {
-            cardCompanyEndpoint = "http://localhost:8080/payment/credit";
-            cardType = "CREDIT";
-        } else if ("5".equals(firstDigit)) {
-            cardCompanyEndpoint = "http://localhost:8080/payment/check";
-            cardType = "CHECK";
-        } else {
-            log.error("[VAN] 알 수 없는 카드 번호: {}", request.getCardNumber());
-            return PaymentResponseDto.builder()
-                    .responseCode("99")
-                    .status("REJECTED")
-                    .message("유효하지 않은 카드번호")
-                    .build();
-        }
-
-        // 2. BIN 조회로 카드사 이름 찾기
+        // 1. BIN 조회로 카드사 이름 찾기
         String binPrefix = request.getCardNumber().replaceAll("-", "").substring(0, 6);
         CardBin cardBin = cardBinRepository.findByBinPrefix(binPrefix).orElse(null);
         String cardCompany = cardBin != null ? cardBin.getCompanyName() : "UNKNOWN";
 
-        log.info("[VAN] {} 결제 요청 - 가맹점: {}, 금액: {}", cardType, request.getMerchantId(), request.getAmount());
+        // 2. 카드사로 승인 요청 (Gateway 경유) - 단일 엔드포인트
+        String cardCompanyEndpoint = "http://localhost:8080/api/payment/approve";
+        log.info("[VAN] 결제 요청 - 가맹점: {}, 금액: {}", request.getMerchantId(), request.getAmount());
 
-        // 3. 카드사로 승인 요청 (Gateway 경유)
         PaymentResponseDto cardResponse = null;
         try {
             cardResponse = restTemplate.postForObject(
@@ -63,18 +44,18 @@ public class VanService {
             log.error("[VAN] 카드사 요청 실패: {}", e.getMessage());
         }
 
-        // 4. 카드사 응답에서 RRN 꺼내기
+        // 3. 카드사 응답에서 RRN 꺼내기
         String rrn = (cardResponse != null && cardResponse.getRrn() != null)
                 ? cardResponse.getRrn()
                 : "UNKNOWN_" + System.currentTimeMillis();
 
-        // 5. 응답 처리
+        // 4. 응답 처리
         String status = (cardResponse != null && "00".equals(cardResponse.getResponseCode()))
                 ? "APPROVED" : "REJECTED";
         String approvalCode = cardResponse != null ? cardResponse.getApprovalCode() : null;
         String responseCode = cardResponse != null ? cardResponse.getResponseCode() : "99";
 
-        // 6. DB 저장
+        // 5. DB 저장
         VanTransaction tx = VanTransaction.builder()
                 .rrn(rrn)
                 .stan(request.getStan())
