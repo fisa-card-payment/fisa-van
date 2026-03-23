@@ -23,8 +23,11 @@ public class AcquisitionItemReader implements ItemReader<VanTransaction> {
     public VanTransaction read() {
         if (iterator == null) {
             // 전날 00:00 ~ 23:59 APPROVED 거래 조회
-            LocalDateTime start = LocalDateTime.now().minusDays(1).toLocalDate().atStartOfDay();
-            LocalDateTime end = start.plusDays(1).minusSeconds(1);
+            // LocalDateTime start = LocalDateTime.now().minusDays(1).toLocalDate().atStartOfDay();
+            // LocalDateTime end = start.plusDays(1).minusSeconds(1);
+
+            LocalDateTime start = LocalDateTime.now().toLocalDate().atStartOfDay();
+            LocalDateTime end = LocalDateTime.now();
 
             List<VanTransaction> transactions =
                     vanTransactionRepository.findByCreatedAtBetweenAndStatus(start, end, "APPROVED");
