@@ -1,0 +1,28 @@
+services:
+  van-db:
+    image: mysql:8.0
+    container_name: van-db
+    environment:
+      MYSQL_DATABASE: van_db
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  van:
+    build: ./van
+    container_name: van
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_URL=jdbc:mysql://van-db:3306/van_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      - DB_USERNAME=root
+      - DB_PASSWORD=${DB_PASSWORD}
+      - EUREKA_URL=http://host.docker.internal:8761/eureka/
+    depends_on:
+      van-db:
+        condition: service_healthy
