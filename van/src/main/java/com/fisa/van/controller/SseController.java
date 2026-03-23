@@ -25,26 +25,40 @@ public class SseController {
     // batchDate별로 SSE 연결 관리
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
-    // 카드사가 결과 보낼 때 받는 엔드포인트
+    public record BatchResultRequest(
+            String batchDate,
+            String statusCode,
+            String message
+    ) {}
+
+    // 카드사가 결과 보낼 때 받는 엔드포인트 -> json 수정
     @PostMapping("/batch-result")
-    public void receiveBatchResult(
-            @RequestParam String batchDate,
-            @RequestParam String result) {
+    public void receiveBatchResult(@RequestBody BatchResultRequest resultRequest) {
 
-        log.info("[SSE] 배치 결과 수신 - 날짜: {}, 결과: {}", batchDate, result);
+        log.info("[SSE] 배치 결과 수신 - 날짜: {}, 상태: {}, 메시지: {}",
+                resultRequest.batchDate(), resultRequest.statusCode(), resultRequest.message());
 
-        SseEmitter emitter = emitters.get(batchDate);
+        SseEmitter emitter = emitters.get(resultRequest.batchDate());
+
         if (emitter != null) {
             try {
+                // 1. 구독 중인 VAN 관리자에게 JSON 데이터 전송
                 emitter.send(SseEmitter.event()
                         .name("batch-result")
-                        .data(result));
-                emitter.complete();
-                emitters.remove(batchDate);
+                        .data(resultRequest));
+
+                // 2. 최종 상태(SUCCESS, FAILED 시리즈)라면 연결 종료 및 맵에서 제거
+                if (!"PROCESSING".equals(resultRequest.statusCode())) {
+                    emitter.complete();
+                    emitters.remove(resultRequest.batchDate());
+                }
+
             } catch (IOException e) {
-                log.error("[SSE] 전송 실패: {}", e.getMessage());
-                emitters.remove(batchDate);
+                log.error("[SSE] 전송 중 오류 발생: {}", e.getMessage());
+                emitters.remove(resultRequest.batchDate());
             }
+        } else {
+            log.warn("[SSE] 해당 날짜({})에 대한 활성화된 구독이 없습니다.", resultRequest.batchDate());
         }
     }
 
