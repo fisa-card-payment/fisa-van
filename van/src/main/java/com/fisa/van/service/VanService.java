@@ -30,7 +30,7 @@ public class VanService {
         String cardCompany = cardBin != null ? cardBin.getCompanyName() : "UNKNOWN";
 
         // 2. 카드사로 승인 요청 (Gateway 경유) - 단일 엔드포인트
-        String cardCompanyEndpoint = "http://localhost:8080/api/payment/approve";
+        String cardCompanyEndpoint = "http://api-gateway:8080/api/payment/approve";
         log.info("[VAN] 결제 요청 - 가맹점: {}, 금액: {}", request.getMerchantId(), request.getAmount());
 
         PaymentResponseDto cardResponse = null;
@@ -47,7 +47,7 @@ public class VanService {
         // 3. 카드사 응답에서 RRN 꺼내기
         String rrn = (cardResponse != null && cardResponse.getRrn() != null)
                 ? cardResponse.getRrn()
-                : "UNKNOWN_" + System.currentTimeMillis();
+                : "ERR" + System.currentTimeMillis() % 100000; // 짧게
 
         // 4. 응답 처리
         String status = (cardResponse != null && "00".equals(cardResponse.getResponseCode()))
