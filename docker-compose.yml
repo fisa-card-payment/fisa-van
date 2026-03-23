@@ -6,12 +6,14 @@ services:
       MYSQL_DATABASE: van_db
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - van-net
 
   van:
     build: ./van
@@ -22,7 +24,16 @@ services:
       - DB_URL=jdbc:mysql://van-db:3306/van_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       - DB_USERNAME=root
       - DB_PASSWORD=${DB_PASSWORD}
-      - EUREKA_URL=http://host.docker.internal:8761/eureka/
+      - EUREKA_URL=http://eureka-server:8761/eureka/
     depends_on:
       van-db:
         condition: service_healthy
+    networks:
+      - van-net
+      - fisa-card-company_card-net
+
+networks:
+  van-net:
+    driver: bridge
+  fisa-card-company_card-net:
+    external: true
