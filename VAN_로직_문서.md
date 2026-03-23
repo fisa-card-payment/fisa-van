@@ -273,7 +273,7 @@ VAN → CSV 전송 (즉시 응답: SUCCESS)
 | SETTLEMENT_FAILED | 대사 성공 후 은행 이체 실패 |
 | PROCESSING_FAILED | 처리 중 예외 발생 |
 
-### 6.3 왜 SSE를 사용했나요?
+### 6.3 SSE 사용 이유
 
 카드사 정산 처리에 시간이 걸리기 때문에 즉각 응답이 불가능합니다.
 
@@ -288,8 +288,6 @@ VAN → CSV 전송 (즉시 응답: SUCCESS)
 - 장점: 구현이 간단하고 Spring MVC에 내장
 - 장점: HTTP 기반이라 방화벽 문제 없음
 - 장점: 카드사 → VAN 단방향 통보에 적합
-- 단점: 서버 재시작 시 emitter 맵이 초기화됨
-- 단점: 다중 서버 환경에서 공유 안 됨 (Redis Pub/Sub으로 해결 가능)
 
 ---
 
@@ -413,37 +411,25 @@ POST http://localhost:8081/api/van/approve
 
 ### 8.3 배치 테스트
 
-**1. SSE 구독 먼저 열기**
-
-브라우저에서:
-```
-http://localhost:8081/api/van/sse/subscribe/2026-03-23
-```
-이 탭을 열어두면 카드사 정산 결과가 실시간으로 표시됩니다.
-
-**2. 결제 데이터 여러 건 생성**
+**1. 결제 데이터 여러 건 생성**
 
 위 결제 테스트를 stan 값 바꿔가며 3~5건 실행
 
-**3. van_transactions 데이터 확인**
+**2. van_transactions 데이터 확인**
 ```bash
 docker exec -it van-db mysql -u root -p1234 van_db -e "SELECT * FROM van_transactions;"
 ```
 
-**4. 배치 수동 실행**
+**3. 배치 수동 실행**
 ```
 POST http://localhost:8081/api/van/batch/run
 ```
 
-**5. CSV 파일 생성 확인**
+**4. CSV 파일 생성 확인**
 ```bash
 docker exec -it van ls ./csv/
 docker exec -it van cat ./csv/acquisition_20260323.csv
 ```
-
-**6. SSE 결과 확인**
-
-브라우저에서 열어둔 SSE 탭에 카드사 정산 결과가 오면 성공!
 
 ---
 
