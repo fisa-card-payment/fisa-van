@@ -16,7 +16,7 @@ public class VanTransaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long vanTxId;
 
-    @Column(unique = true, nullable = false, length = 12)
+    @Column(unique = true, nullable = false, length = 20)
     private String rrn;
 
     @Column(nullable = false, length = 6)
